@@ -4,13 +4,21 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV UHD_TAG=v4.6.0.0
 ENV MAKEWIDTH=4
+ENV TZ=UTC
 
-# Install dependencies with proper Python support and liburing
-RUN apt-get update && \
+# Configure DNS and update package lists
+RUN echo "nameserver 8.8.8.8" > /etc/resolv.conf && \
+    apt-get update --fix-missing && \
     apt-get install -y \
+        pkg-config \
+        pkgconf \
         build-essential \
-        cmake \
+        autotools-dev \
+        autoconf \
+        automake \
+        libtool \
         git \
+        cmake \
         python3-dev \
         python3-pip \
         python3-setuptools \
@@ -48,7 +56,6 @@ RUN apt-get update && \
         pybind11-dev \
         python3-pybind11 \
         # Essential dependencies
-        pkg-config \
         libssl-dev \
         wget \
         curl \
@@ -58,9 +65,6 @@ RUN apt-get update && \
         libtalloc-dev \
         libpcsclite-dev \
         libsctp-dev \
-        autoconf \
-        automake \
-        libtool \
         # Smart card dependencies
         swig \
         pcscd \
@@ -71,7 +75,7 @@ RUN apt-get update && \
         ninja-build \
         meson \
         libgnutls28-dev \
-        libgcrypt-dev \
+        libgcrypt20-dev \
         libidn11-dev \
         libmongoc-dev \
         libbson-dev \
@@ -82,6 +86,10 @@ RUN apt-get update && \
         libtins-dev \
         && apt-get clean && \
         rm -rf /var/lib/apt/lists/*
+
+# Set environment variables for proper library discovery
+ENV PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH"
+ENV LD_LIBRARY_PATH="/usr/local/lib:$LD_LIBRARY_PATH"
 
 # Verify critical dependencies before building
 RUN echo "Verifying critical dependencies..." && \
@@ -116,20 +124,20 @@ RUN echo "Verifying critical dependencies..." && \
      pkg-config --modversion libmnl && echo "✅ libmnl ready")
 
 # Install Python dependencies that might be missing
-RUN pip3 install \
+RUN pip3 install --no-cache-dir \
     mako \
     ruamel.yaml \
-    requests \
-    packaging \
     smpplib \
-    pycryptodome \
-    pyscard
+    pyscard \
+    click \
+    pyyaml
 
-# Create uhd user and directories
+# Create uhd user for UHD build
 RUN useradd -m -s /bin/bash uhd && \
     mkdir -p /opt/uhd && \
     chown uhd:uhd /opt/uhd
 
+# Switch to uhd user for UHD build
 USER uhd
 WORKDIR /opt/uhd
 
@@ -163,49 +171,51 @@ RUN cd uhd-source/host && \
 ENV PATH="/opt/uhd/install/bin:${PATH}"
 ENV LD_LIBRARY_PATH="/opt/uhd/install/lib:${LD_LIBRARY_PATH}"
 ENV PYTHONPATH="/opt/uhd/install/lib/python3/dist-packages:${PYTHONPATH}"
-ENV UHD_IMAGES_DIR="/opt/uhd/install/share/uhd/images"
-ENV PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH}"
 
+# Switch back to root for system-wide installations
 USER root
 
-# Download UHD images (this can take time)
+# Download UHD images
 RUN /opt/uhd/install/bin/uhd_images_downloader || echo "Image download failed, continuing..."
 
-# Build Osmocom components with liburing support
+# Build Osmocom components in correct order with proper environment
 WORKDIR /opt/build
 
-# Verify liburing is available before building Osmocom components
-RUN pkg-config --exists liburing && pkg-config --modversion liburing || \
-    (echo "ERROR: liburing not found" && exit 1)
+# Verify dependencies are available before building Osmocom components
+RUN pkg-config --exists liburing && pkg-config --modversion liburing && \
+    pkg-config --exists libmnl && pkg-config --modversion libmnl || \
+    (echo "ERROR: Required dependencies not found" && exit 1)
 
-# Install libosmocore (now with liburing available)
+# Build libosmocore first (foundation library)
 RUN git clone https://gitea.osmocom.org/osmocom/libosmocore.git && \
     cd libosmocore && \
     autoreconf -i && \
     ./configure && \
     make -j${MAKEWIDTH} && \
     make install && \
-    ldconfig
+    ldconfig && \
+    cd ..
 
-# Install libosmo-abis
-RUN git clone https://gitea.osmocom.org/osmocom/libosmo-abis.git && \
-    cd libosmo-abis && \
-    autoreconf -i && \
-    ./configure && \
-    make -j${MAKEWIDTH} && \
-    make install && \
-    ldconfig
-
-# Install libosmo-netif
+# Build libosmo-netif (depends on libosmocore)
 RUN git clone https://gitea.osmocom.org/osmocom/libosmo-netif.git && \
     cd libosmo-netif && \
     autoreconf -i && \
     ./configure && \
     make -j${MAKEWIDTH} && \
     make install && \
+    ldconfig && \
+    cd ..
+
+# Build libosmo-abis with DAHDI disabled (depends on libosmocore and libosmo-netif)
+RUN git clone https://gitea.osmocom.org/osmocom/libosmo-abis.git && \
+    cd libosmo-abis && \
+    autoreconf -i && \
+    ./configure --disable-dahdi && \
+    make -j${MAKEWIDTH} && \
+    make install && \
     ldconfig
 
-# Install OsmoMSC
+# Install OsmoMSC (depends on all above libraries)
 RUN git clone https://gitea.osmocom.org/cellular-infrastructure/osmo-msc && \
     cd osmo-msc && \
     autoreconf -i && \
@@ -214,7 +224,7 @@ RUN git clone https://gitea.osmocom.org/cellular-infrastructure/osmo-msc && \
     make install && \
     ldconfig
 
-# Install OsmoHLR
+# Install OsmoHLR (depends on libosmocore)
 RUN git clone https://gitea.osmocom.org/cellular-infrastructure/osmo-hlr && \
     cd osmo-hlr && \
     autoreconf -i && \
