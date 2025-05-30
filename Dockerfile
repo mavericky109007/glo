@@ -210,6 +210,14 @@ RUN git clone https://github.com/open5gs/open5gs && \
     ninja -C build install && \
     ldconfig
 
+# Create OTA applet directory and download reference implementation
+WORKDIR /opt/ota
+RUN git clone https://github.com/ryantheelder/OTAapplet.git applets || \
+    (echo "Creating placeholder applet directory..." && \
+     mkdir -p applets && \
+     echo "# OTA Applet Directory" > applets/README.md && \
+     echo "Place your OTA applet implementations here" >> applets/README.md)
+
 # Setup TUN interface script
 RUN echo '#!/bin/bash\n\
 ip tuntap add name ogstun mode tun\n\
@@ -245,7 +253,10 @@ echo ""\n\
 echo "6. liburing verification:"\n\
 pkg-config --modversion liburing && echo "✓ liburing available" || echo "✗ liburing missing"\n\
 echo ""\n\
-echo "7. USRP Detection (requires hardware):"\n\
+echo "7. OTA Applets:"\n\
+ls -la /opt/ota/applets/ && echo "✓ Applet directory available" || echo "✗ Applet directory missing"\n\
+echo ""\n\
+echo "8. USRP Detection (requires hardware):"\n\
 /opt/uhd/install/bin/uhd_find_devices || echo "No USRP devices found (normal without hardware)"\n\
 echo ""\n\
 echo "=== Verification Complete ==="\n\
