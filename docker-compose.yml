@@ -1,14 +1,32 @@
+version: '3.8'
+
 services:
   ota-testing:
-    build: .
-    container_name: ota-testing-env
-    privileged: true  # Required for TUN interface and network operations
+    build: 
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - UHD_TAG=v4.6.0.0
+        - MAKEWIDTH=4
+    container_name: ota-testing
+    privileged: true
+    network_mode: host  # Required for USRP access
     volumes:
-      - ./configs:/ota-testing/configs
-      - ./scripts:/ota-testing/scripts
-      - ./logs:/ota-testing/logs
-      - ./applets:/ota-testing/applets
-      - /dev:/dev  # For USB device access
+      - ./configs:/configs
+      - ./scripts:/scripts
+      - ./logs:/logs
+      - /dev:/dev  # Device access
+    environment:
+      - DISPLAY=${DISPLAY}
+      - UHD_IMAGES_DIR=/opt/uhd/install/share/uhd/images
+    devices:
+      - /dev/bus/usb:/dev/bus/usb  # USB device access
+    cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+    stdin_open: true
+    tty: true
+    command: /bin/bash
     ports:
       - "2755:2755"   # SMPP
       - "3000:3000"   # Open5GS WebUI
@@ -16,10 +34,6 @@ services:
       - "9090:9090"   # Metrics
     networks:
       - ota-network
-    environment:
-      - DISPLAY=${DISPLAY:-:0}
-    stdin_open: true
-    tty: true
     depends_on:
       - mongodb
 

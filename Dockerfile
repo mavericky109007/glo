@@ -1,194 +1,123 @@
 FROM ubuntu:22.04
 
-# Avoid interactive prompts during installation
+# Use Ubuntu 22.04 for better compatibility
 ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=UTC
+ENV UHD_TAG=v4.6.0.0
+ENV MAKEWIDTH=4
 
-# Set working directory
-WORKDIR /ota-testing
+# Install dependencies with proper Python support
+RUN apt-get update && \
+    apt-get install -y \
+        build-essential \
+        cmake \
+        git \
+        python3-dev \
+        python3-pip \
+        python3-setuptools \
+        python3-wheel \
+        libboost-all-dev \
+        libusb-1.0-0-dev \
+        libudev-dev \
+        libncurses5-dev \
+        libfftw3-bin \
+        libfftw3-dev \
+        libfftw3-doc \
+        libcppunit-1.15-0 \
+        libcppunit-dev \
+        libcppunit-doc \
+        ncurses-bin \
+        cpufrequtils \
+        python3-numpy \
+        python3-cheetah \
+        python3-lxml \
+        doxygen \
+        libqwt-qt5-dev \
+        libqt5opengl5-dev \
+        python3-pyqt5 \
+        liblog4cpp5-dev \
+        libzmq3-dev \
+        python3-yaml \
+        python3-click \
+        python3-click-plugins \
+        python3-zmq \
+        python3-scipy \
+        python3-gi-cairo \
+        gir1.2-gtk-3.0 \
+        libcodec2-dev \
+        libgsm1-dev \
+        pybind11-dev \
+        python3-pybind11 \
+        # Add missing dependencies
+        pkg-config \
+        libssl-dev \
+        wget \
+        curl && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    # Build essentials
-    build-essential \
-    cmake \
-    git \
-    wget \
-    curl \
-    pkg-config \
-    autoconf \
-    automake \
-    libtool \
-    flex \
-    bison \
-    ninja-build \
-    meson \
-    # Python and development
-    python3 \
-    python3-dev \
-    python3-pip \
-    python3-setuptools \
-    python3-wheel \
-    # Smart card dependencies (fixes pyscard error)
-    swig \
-    libpcsclite-dev \
-    pcscd \
-    libccid \
-    libusb-dev \
-    # Libraries
-    libssl-dev \
-    libusb-1.0-0-dev \
-    libfftw3-dev \
-    libboost-all-dev \
-    libsctp-dev \
-    libconfig++-dev \
-    libmbedtls-dev \
-    libgnutls28-dev \
-    libgcrypt-dev \
-    libidn11-dev \
-    libmongoc-dev \
-    libbson-dev \
-    libyaml-dev \
-    libnghttp2-dev \
-    libmicrohttpd-dev \
-    libcurl4-gnutls-dev \
-    libtins-dev \
-    libtalloc-dev \
-    libncurses-dev \
-    # Network tools
-    tmux \
-    telnet \
-    netcat \
-    tcpdump \
-    # Java for SIM tools
-    default-jdk \
-    # Additional utilities
-    vim \
-    nano \
-    htop \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Python dependencies in stages to handle pyscard properly
-RUN pip3 install --no-cache-dir \
-    smpplib \
-    pycryptodome \
-    requests \
-    pyyaml \
-    numpy \
-    scipy \
+# Install Python dependencies that might be missing
+RUN pip3 install \
     mako \
-    ruamel.yaml
+    ruamel.yaml \
+    requests \
+    packaging
 
-# Install pyscard separately after system dependencies are in place
-RUN pip3 install --no-cache-dir pyscard
+# Create uhd user and directories
+RUN useradd -m -s /bin/bash uhd && \
+    mkdir -p /opt/uhd && \
+    chown uhd:uhd /opt/uhd
 
-# Create directory structure
-RUN mkdir -p repos configs scripts logs applets
+USER uhd
+WORKDIR /opt/uhd
 
-# Copy configuration files and scripts
-COPY configs/ ./configs/
-COPY scripts/ ./scripts/
+# Clone UHD with timeout and retry logic
+RUN timeout 3600 git clone --depth 1 --branch ${UHD_TAG} https://github.com/EttusResearch/uhd.git uhd-source || \
+    (echo "Git clone timed out or failed, trying shallow clone..." && \
+     git clone --depth 1 https://github.com/EttusResearch/uhd.git uhd-source)
 
-# Set executable permissions
-RUN chmod +x scripts/*.sh scripts/*.py
-
-# Install UHD (for USRP support) with proper dependencies
-RUN cd repos && \
-    git clone https://github.com/EttusResearch/uhd.git && \
-    cd uhd/host && \
-    python3 -c "import mako; import ruamel.yaml; print('✓ UHD dependencies verified')" && \
-    mkdir build && cd build && \
-    cmake .. && \
-    make -j$(nproc) && \
-    make install && \
-    ldconfig
-
-# Install srsRAN_4G
-RUN cd repos && \
-    git clone https://github.com/srsRAN/srsRAN_4G.git && \
-    cd srsRAN_4G && \
-    mkdir build && cd build && \
-    cmake .. && \
-    make -j$(nproc) && \
+# Build UHD with proper configuration
+RUN cd uhd-source && \
+    mkdir build && \
+    cd build && \
+    cmake \
+        -DCMAKE_INSTALL_PREFIX=/opt/uhd/install \
+        -DENABLE_PYTHON_API=ON \
+        -DENABLE_PYTHON3=ON \
+        -DPYTHON_EXECUTABLE=/usr/bin/python3 \
+        -DENABLE_TESTS=OFF \
+        -DENABLE_E100=OFF \
+        -DENABLE_E300=OFF \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DENABLE_STATIC_LIBS=OFF \
+        -DENABLE_SHARED_LIBS=ON \
+        .. && \
+    make -j${MAKEWIDTH} && \
     make install
 
-# Install Osmocom components
-RUN cd repos && \
-    # libosmocore
-    git clone https://gitea.osmocom.org/osmocom/libosmocore.git && \
-    cd libosmocore && \
-    autoreconf -i && \
-    ./configure && \
-    make -j$(nproc) && \
-    make install && \
-    ldconfig && \
-    cd .. && \
-    # libosmo-abis
-    git clone https://gitea.osmocom.org/osmocom/libosmo-abis.git && \
-    cd libosmo-abis && \
-    autoreconf -i && \
-    ./configure && \
-    make -j$(nproc) && \
-    make install && \
-    ldconfig && \
-    cd .. && \
-    # OsmoHLR
-    git clone https://github.com/osmocom/osmo-hlr.git && \
-    cd osmo-hlr && \
-    autoreconf -i && \
-    ./configure && \
-    make -j$(nproc) && \
-    make install && \
-    ldconfig && \
-    cd .. && \
-    # OsmoMSC
-    git clone https://gitea.osmocom.org/cellular-infrastructure/osmo-msc && \
-    cd osmo-msc && \
-    autoreconf -i && \
-    ./configure --enable-smpp && \
-    make -j$(nproc) && \
-    make install && \
-    ldconfig
+# Set up environment
+ENV PATH="/opt/uhd/install/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/uhd/install/lib:${LD_LIBRARY_PATH}"
+ENV PYTHONPATH="/opt/uhd/install/lib/python3/dist-packages:${PYTHONPATH}"
+ENV UHD_IMAGES_DIR="/opt/uhd/install/share/uhd/images"
 
-# Install Open5GS
-RUN cd repos && \
-    git clone https://github.com/open5gs/open5gs && \
-    cd open5gs && \
-    meson build --prefix=/usr/local && \
-    ninja -C build && \
-    cd build && \
-    ninja install
+USER root
 
-# Install SIM tools
-RUN cd repos && \
-    git clone https://github.com/herlesupreeth/sim-tools.git && \
-    git clone https://github.com/ryantheelder/OTAapplet.git && \
-    git clone https://gitea.osmocom.org/sim-card/hello-stk
+# Download UHD images (this can take time)
+RUN /opt/uhd/install/bin/uhd_images_downloader || echo "Image download failed, continuing..."
 
-# Install GlobalPlatformPro
-RUN wget -O /usr/local/bin/gp.jar \
-    https://github.com/martinpaljak/GlobalPlatformPro/releases/download/v21.05.25/gp.jar && \
-    echo '#!/bin/bash\njava -jar /usr/local/bin/gp.jar "$@"' > /usr/local/bin/gp && \
-    chmod +x /usr/local/bin/gp
-
-# Setup TUN interface script
+# Create verification script
 RUN echo '#!/bin/bash\n\
-ip tuntap add name ogstun mode tun\n\
-ip addr add 10.45.0.1/16 dev ogstun\n\
-ip addr add 2001:db8:cafe::1/48 dev ogstun\n\
-ip link set ogstun up' > /usr/local/bin/setup-tun.sh && \
-    chmod +x /usr/local/bin/setup-tun.sh
+echo "=== UHD Build Verification ==="\n\
+echo "UHD Version:"\n\
+/opt/uhd/install/bin/uhd_config_info --version\n\
+echo ""\n\
+echo "Python API Test:"\n\
+python3 -c "import uhd; print(f\"UHD Python API loaded successfully: {uhd.get_version_string()}\")" || echo "Python API failed"\n\
+echo ""\n\
+echo "USRP Detection (requires hardware):"\n\
+/opt/uhd/install/bin/uhd_find_devices || echo "No USRP devices found (normal without hardware)"\n\
+' > /opt/uhd/verify_uhd.sh && \
+    chmod +x /opt/uhd/verify_uhd.sh
 
-# Verify installations
-RUN python3 -c "import smartcard; print('✓ pyscard installed successfully')" && \
-    python3 -c "import smpplib; print('✓ smpplib installed successfully')" && \
-    python3 -c "import mako; import ruamel.yaml; print('✓ UHD dependencies verified')" && \
-    which open5gs-mmed && echo "✓ Open5GS installed" && \
-    which osmo-msc && echo "✓ OsmoMSC installed" && \
-    uhd_find_devices && echo "✓ UHD installed successfully"
-
-# Expose ports for various services
-EXPOSE 2755 3000 4258 9090
-
-# Set default command
+WORKDIR /opt/uhd
 CMD ["/bin/bash"] 

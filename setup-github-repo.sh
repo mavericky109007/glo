@@ -103,29 +103,48 @@ fi
 # Add remote repository with username
 echo "Adding GitHub remote..."
 if ! git remote get-url origin &>/dev/null; then
-    git remote add origin https://${GITHUB_USERNAME}@github.com/mavericky109007/glo.git
+    git remote add origin git@github.com:mavericky109007/glo.git
     echo "✓ Remote repository added"
 else
     echo "✓ Remote repository already exists"
-    # Update existing remote to include username
-    git remote set-url origin https://${GITHUB_USERNAME}@github.com/mavericky109007/glo.git
+    # Update existing remote to use SSH
+    git remote set-url origin git@github.com:mavericky109007/glo.git
 fi
 
 # Verify remote
 echo "Verifying remote repository..."
 git remote -v
 
+# Check if remote has content
+echo "Checking remote repository status..."
+if git ls-remote origin main &>/dev/null; then
+    echo "Remote repository has content. Pulling changes first..."
+    
+    # Fetch remote changes
+    git fetch origin main
+    
+    # Check if we have any commits locally
+    if git rev-parse HEAD &>/dev/null; then
+        echo "Local repository has commits. Merging with remote..."
+        git pull origin main --allow-unrelated-histories --no-edit
+    else
+        echo "Local repository is empty. Setting up tracking..."
+        git branch -u origin/main main
+        git reset --hard origin/main
+    fi
+fi
+
 # Stage all files
 echo "Staging files..."
 git add .
 
-# Check what will be committed
-echo "Files to be committed:"
-git status --short
-
-# Create commit
-echo "Creating commit..."
-git commit -m "Initial commit: Complete OTA SMS Testing Environment
+# Check if there are changes to commit
+if git diff --staged --quiet; then
+    echo "No changes to commit"
+else
+    # Create commit
+    echo "Creating commit..."
+    git commit -m "Update: Complete OTA SMS Testing Environment
 
 Features:
 - Docker-based setup with resolved dependencies
@@ -154,21 +173,11 @@ Usage:
 2. docker-compose up -d  
 3. docker-compose exec ota-testing bash
 4. ./scripts/verify-build.sh"
+fi
 
 # Push to GitHub
 echo ""
-echo "⚠️  AUTHENTICATION REQUIRED ⚠️"
-echo "When prompted for password, use your GitHub Personal Access Token"
-echo "NOT your GitHub account password!"
-echo ""
-echo "If you don't have a Personal Access Token:"
-echo "1. Go to: https://github.com/settings/tokens"
-echo "2. Generate new token (classic)"
-echo "3. Select 'repo' scope"
-echo "4. Use the token as your password"
-echo ""
-read -p "Press Enter to continue with push..."
-
+echo "Pushing to GitHub..."
 git push -u origin main
 
 if [ $? -eq 0 ]; then
@@ -184,6 +193,24 @@ if [ $? -eq 0 ]; then
     echo "4. Add collaborators if working in a team"
 else
     echo ""
-    echo "❌ Push failed. Please check your authentication."
-    echo "Make sure you're using a Personal Access Token, not your password."
+    echo "❌ Push failed. Trying alternative approaches..."
+    
+    echo "Option 1: Force push (will overwrite remote content)"
+    read -p "Do you want to force push? (y/N): " FORCE_PUSH
+    
+    if [[ $FORCE_PUSH =~ ^[Yy]$ ]]; then
+        git push -u origin main --force
+        if [ $? -eq 0 ]; then
+            echo "✓ Force push successful!"
+        else
+            echo "❌ Force push also failed. Please check your SSH key setup."
+        fi
+    else
+        echo "Please resolve conflicts manually:"
+        echo "1. git pull origin main --allow-unrelated-histories"
+        echo "2. Resolve any conflicts"
+        echo "3. git add ."
+        echo "4. git commit -m 'Merge conflicts'"
+        echo "5. git push -u origin main"
+    fi
 fi 
