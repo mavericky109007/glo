@@ -6,9 +6,9 @@
 
 This testing environment is designed to help security researchers, telecommunications professionals, and students understand:
 - OTA (Over-The-Air) SMS vulnerabilities
-- SIM card security mechanisms
-- Mobile network security testing
-- Vulnerability assessment methodologies
+- Cellular network security mechanisms
+- SIM card applet management
+- Mobile network infrastructure
 
 **DO NOT use this environment for malicious purposes or against systems you do not own or have explicit permission to test.**
 
@@ -16,4 +16,4 @@ This testing environment is designed to help security researchers, telecommunica
 
 This comprehensive testing environment simulates a complete mobile network infrastructure capable of sending OTA SMS messages for applet installation and deletion. It recreates the conditions necessary to study vulnerabilities like Simjacker and other OTA-based attacks in a controlled, isolated environment.
 
-### System Architecture 
+## System Architecture 
