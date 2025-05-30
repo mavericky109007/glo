@@ -1,0 +1,43 @@
+services:
+  ota-testing:
+    build: .
+    container_name: ota-testing-env
+    privileged: true  # Required for TUN interface and network operations
+    volumes:
+      - ./configs:/ota-testing/configs
+      - ./scripts:/ota-testing/scripts
+      - ./logs:/ota-testing/logs
+      - ./applets:/ota-testing/applets
+      - /dev:/dev  # For USB device access
+    ports:
+      - "2755:2755"   # SMPP
+      - "3000:3000"   # Open5GS WebUI
+      - "4258:4258"   # OsmoHLR
+      - "9090:9090"   # Metrics
+    networks:
+      - ota-network
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+    stdin_open: true
+    tty: true
+    depends_on:
+      - mongodb
+
+  mongodb:
+    image: mongo:4.4
+    container_name: ota-mongodb
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - ota-network
+    environment:
+      - MONGO_INITDB_DATABASE=open5gs
+    ports:
+      - "27017:27017"
+
+networks:
+  ota-network:
+    driver: bridge
+
+volumes:
+  mongodb_data: 
