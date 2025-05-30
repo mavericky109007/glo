@@ -54,6 +54,7 @@ RUN apt-get update && \
         curl \
         # Osmocom dependencies (liburing-dev available in Ubuntu 22.04)
         liburing-dev \
+        libmnl-dev \
         libtalloc-dev \
         libpcsclite-dev \
         libsctp-dev \
@@ -82,19 +83,37 @@ RUN apt-get update && \
         && apt-get clean && \
         rm -rf /var/lib/apt/lists/*
 
-# Verify liburing installation
-RUN pkg-config --modversion liburing && echo "✅ liburing available" || \
-    (echo "❌ liburing not found, building from source..." && \
+# Verify critical dependencies before building
+RUN echo "Verifying critical dependencies..." && \
+    pkg-config --modversion liburing && echo "✅ liburing available" && \
+    pkg-config --modversion libmnl && echo "✅ libmnl available" || \
+    (echo "❌ Critical dependencies missing, building from source..." && \
      cd /tmp && \
-     git clone https://github.com/axboe/liburing.git && \
-     cd liburing && \
-     ./configure --prefix=/usr/local && \
-     make -j$(nproc) && \
-     make install && \
-     ldconfig && \
+     # Build liburing if missing
+     if ! pkg-config --exists liburing; then \
+         git clone https://github.com/axboe/liburing.git && \
+         cd liburing && \
+         ./configure --prefix=/usr/local && \
+         make -j$(nproc) && \
+         make install && \
+         ldconfig && \
+         cd /tmp; \
+     fi && \
+     # Build libmnl if missing
+     if ! pkg-config --exists libmnl; then \
+         wget https://netfilter.org/projects/libmnl/files/libmnl-1.0.5.tar.bz2 && \
+         tar -xjf libmnl-1.0.5.tar.bz2 && \
+         cd libmnl-1.0.5 && \
+         ./configure --prefix=/usr && \
+         make && \
+         make install && \
+         ldconfig && \
+         cd /tmp; \
+     fi && \
      echo 'export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH"' >> /etc/environment && \
-     cd / && rm -rf /tmp/liburing && \
-     pkg-config --modversion liburing && echo "✅ liburing built from source")
+     cd / && rm -rf /tmp/* && \
+     pkg-config --modversion liburing && echo "✅ liburing ready" && \
+     pkg-config --modversion libmnl && echo "✅ libmnl ready")
 
 # Install Python dependencies that might be missing
 RUN pip3 install \
@@ -119,8 +138,8 @@ RUN timeout 3600 git clone --depth 1 --branch ${UHD_TAG} https://github.com/Ettu
     (echo "Git clone timed out or failed, trying shallow clone..." && \
      git clone --depth 1 https://github.com/EttusResearch/uhd.git uhd-source)
 
-# Build UHD with proper configuration
-RUN cd uhd-source && \
+# Build UHD with proper configuration and RPATH
+RUN cd uhd-source/host && \
     mkdir build && \
     cd build && \
     cmake \
@@ -134,6 +153,8 @@ RUN cd uhd-source && \
         -DCMAKE_BUILD_TYPE=Release \
         -DENABLE_STATIC_LIBS=OFF \
         -DENABLE_SHARED_LIBS=ON \
+        -DCMAKE_INSTALL_RPATH=/opt/uhd/install/lib \
+        -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
         .. && \
     make -j${MAKEWIDTH} && \
     make install
@@ -219,12 +240,8 @@ RUN git clone https://github.com/ryantheelder/OTAapplet.git applets || \
      echo "Place your OTA applet implementations here" >> applets/README.md)
 
 # Setup TUN interface script
-RUN echo '#!/bin/bash\n\
-ip tuntap add name ogstun mode tun\n\
-ip addr add 10.45.0.1/16 dev ogstun\n\
-ip addr add 2001:db8:cafe::1/48 dev ogstun\n\
-ip link set ogstun up' > /usr/local/bin/setup-tun.sh && \
-    chmod +x /usr/local/bin/setup-tun.sh
+COPY scripts/setup-tun.sh /usr/local/bin/setup-tun.sh
+RUN chmod +x /usr/local/bin/setup-tun.sh
 
 # Create comprehensive verification script
 RUN echo '#!/bin/bash\n\
@@ -242,16 +259,17 @@ python3 -c "import smartcard; print(\"✓ pyscard\")" || echo "✗ pyscard"\n\
 python3 -c "import mako; print(\"✓ mako\")" || echo "✗ mako"\n\
 python3 -c "import ruamel.yaml; print(\"✓ ruamel.yaml\")" || echo "✗ ruamel.yaml"\n\
 echo ""\n\
-echo "4. Osmocom Components:"\n\
+echo "4. Critical Dependencies:"\n\
+pkg-config --modversion liburing && echo "✓ liburing available" || echo "✗ liburing missing"\n\
+pkg-config --modversion libmnl && echo "✓ libmnl available" || echo "✗ libmnl missing"\n\
+echo ""\n\
+echo "5. Osmocom Components:"\n\
 which osmo-msc && echo "✓ OsmoMSC installed" || echo "✗ OsmoMSC missing"\n\
 which osmo-hlr && echo "✓ OsmoHLR installed" || echo "✗ OsmoHLR missing"\n\
 echo ""\n\
-echo "5. Open5GS Components:"\n\
+echo "6. Open5GS Components:"\n\
 which open5gs-mmed && echo "✓ Open5GS MME installed" || echo "✗ Open5GS MME missing"\n\
 which open5gs-hssd && echo "✓ Open5GS HSS installed" || echo "✗ Open5GS HSS missing"\n\
-echo ""\n\
-echo "6. liburing verification:"\n\
-pkg-config --modversion liburing && echo "✓ liburing available" || echo "✗ liburing missing"\n\
 echo ""\n\
 echo "7. OTA Applets:"\n\
 ls -la /opt/ota/applets/ && echo "✓ Applet directory available" || echo "✗ Applet directory missing"\n\
