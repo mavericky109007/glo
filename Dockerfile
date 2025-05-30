@@ -7,8 +7,7 @@ ENV MAKEWIDTH=4
 ENV TZ=UTC
 
 # Configure DNS and update package lists
-RUN echo "nameserver 8.8.8.8" > /etc/resolv.conf && \
-    apt-get update --fix-missing && \
+RUN apt-get update --fix-missing && \
     apt-get install -y \
         pkg-config \
         pkgconf \
