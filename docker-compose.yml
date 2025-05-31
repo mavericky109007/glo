@@ -1,0 +1,41 @@
+services:
+  ota-mongodb:
+    image: mongo:4.4
+    container_name: ota-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    command: mongod --bind_ip_all
+    networks:
+      - ota-network
+
+  ota-testing-env:
+    build: .
+    container_name: ota-testing-env
+    depends_on:
+      - ota-mongodb
+    ports:
+      - "2775:2775"
+      - "3000:3000"
+      - "8080:8080"
+    volumes:
+      - ./configs:/ota-testing/configs
+      - ./scripts:/ota-testing/scripts
+      - ./logs:/ota-testing/logs
+      - ./data:/ota-testing/data
+    networks:
+      - ota-network
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+    restart: unless-stopped
+    environment:
+      - MONGODB_URI=mongodb://ota-mongodb:27017/open5gs
+
+volumes:
+  mongodb_data:
+
+networks:
+  ota-network:
+    driver: bridge

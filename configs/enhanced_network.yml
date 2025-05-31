@@ -1,0 +1,41 @@
+# Enhanced Network Configuration
+# Combines comprehensive testing with focused OTA operations
+
+network:
+  name: "Enhanced-OTA-Test"
+  mcc: "001"
+  mnc: "01"
+  
+smpp:
+  server:
+    host: "127.0.0.25"
+    port: 2755
+    system_id: "ota-test"
+    password: "123"
+  
+  clients:
+    - name: "enhanced_client"
+      host: "127.0.0.1"
+      port: 2776
+      
+ota:
+  applets:
+    hello_world:
+      aid: "D07002CA44900101"
+      cap_file: "~/ota-testing/repos/hello-stk/hello-stk/hello-stk.cap"
+      
+    test_applet:
+      aid: "A000000151000000"
+      cap_file: "~/ota-testing/applets/test.cap"
+      
+  security:
+    kic: "404142434445464748494A4B4C4D4E4F"
+    kid: "404142434445464748494A4B4C4D4E4F"
+    tar: "B00000"
+    
+subscribers:
+  test_user:
+    imsi: "001010123456789"
+    msisdn: "12345678900"
+    ki: "465B5CE8B199B49FAA5F0A2EE238A6BC"
+    opc: "E8ED289DEBA952E4283B54E88E6183CA" 

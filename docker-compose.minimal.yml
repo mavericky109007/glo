@@ -1,0 +1,12 @@
+services:
+  ota-testing-minimal:
+    build:
+      context: .
+      dockerfile: Dockerfile.minimal
+    container_name: ota-testing-minimal
+    volumes:
+      - ./scripts:/ota-testing/scripts
+      - ./configs:/ota-testing/configs
+      - ./logs:/ota-testing/logs
+    stdin_open: true
+    tty: true 

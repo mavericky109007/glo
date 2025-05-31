@@ -1,0 +1,30 @@
+logger:
+  file:
+    path: /ota-testing/logs/mme.log
+  level: info
+
+global:
+  max:
+    ue: 1024
+    peer: 64
+
+mme:
+  freeDiameter: /usr/local/etc/freeDiameter/mme.conf
+  s1ap:
+    addr: 127.0.0.2
+  gtpc:
+    addr: 127.0.0.2
+  metrics:
+    addr: 127.0.0.2
+    port: 9090
+
+sgwc:
+  gtpc:
+    addr: 127.0.0.3
+
+smf:
+  gtpc:
+    addr: 127.0.0.4
+
+parameter:
+  no_ipv6: true

@@ -1,0 +1,22 @@
+logger:
+  file:
+    path: /ota-testing/logs/sgwc.log
+  level: info
+
+global:
+  max:
+    ue: 1024
+    peer: 64
+
+sgwc:
+  gtpc:
+    addr: 127.0.0.3
+  pfcp:
+    addr: 127.0.0.3
+
+sgwu:
+  pfcp:
+    addr: 127.0.0.6
+
+parameter:
+  no_ipv6: true

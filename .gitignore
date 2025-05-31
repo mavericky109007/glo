@@ -1,0 +1,7 @@
+# Ignore log files
+logs/
+
+# Ignore embedded repositories
+OTAapplet/
+libosmocore/
+liburing/
