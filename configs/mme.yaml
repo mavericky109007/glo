@@ -1,6 +1,6 @@
 logger:
   file:
-    path: /ota-testing/logs/mme.log
+    path: /home/tetrixcorps/Desktop/glo/ota-testing/logs/mme.log
   level: info
 
 global:
@@ -28,3 +28,13 @@ smf:
 
 parameter:
   no_ipv6: true
+
+sms:
+  smpp:
+    gateway:
+      - name: telnyx-smpp-gateway
+        host: ota-testing-env
+        port: 2775
+        bind_mode: transceiver
+        system_id: smppclient
+        password: password

@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y \
     cmake \
     meson \
     pkg-config \
+    libpcsclite-dev \
     libsctp-dev \
     libgnutls28-dev \
     libgcrypt-dev \
@@ -36,24 +37,40 @@ RUN apt-get update && apt-get install -y \
     vim \
     wget \
     curl \
-    mongodb-clients \
     sqlite3 \
-    && rm -rf /var/lib/apt/lists/*
+    gnupg \
+    swig \
+    && \
+    ln -s /usr/bin/python3 /usr/bin/python && \
+    curl -fsSL https://www.mongodb.org/static/pgp/server-6.0.asc | gpg --dearmor -o /usr/share/keyrings/mongodb-server-6.0.gpg && \
+    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/6.0 multiverse" | tee /etc/apt/sources.list.d/mongodb-org-6.0.list && \
+    apt-get update && apt-get install -y mongodb-mongosh && \
+    mongosh --version && \
+    rm -rf /var/lib/apt/lists/*
+
+# First, upgrade the build tools to their latest versions
+RUN python3 -m pip install --upgrade --no-cache-dir pip setuptools wheel
 
 # Install libidn development package
 RUN apt-get update && \
     (apt-get install -y libidn-dev || apt-get install -y libidn11-dev) && \
     rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip and install Meson
-RUN python3 -m pip install --upgrade pip && \
-    python3 -m pip install meson ninja
-
-# Verify Meson installation
-RUN meson --version && ninja --version
-
 # Install Python dependencies for OTA testing
-RUN pip3 install smpplib pymongo pycrypto
+RUN pip3 install smpplib pymongo pycrypto pyscard
+
+# Create working directory and copy all files
+WORKDIR /ota-testing
+COPY . /ota-testing/
+
+# Configure Git to use GitHub PAT to avoid rate limits
+ARG GITHUB_PAT
+RUN git config --global url."https://${GITHUB_PAT}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
+
+# 2. now install the project requirements
+RUN pip3 install --no-cache-dir \
+    --extra-index-url https://www.piwheels.org/simple \
+    -r requirements.txt
 
 # Install prometheus-cpp from source
 RUN cd /tmp && \
@@ -67,12 +84,6 @@ RUN cd /tmp && \
     make install && \
     ldconfig && \
     rm -rf /tmp/prometheus-cpp
-
-# Create working directory
-WORKDIR /ota-testing
-
-# Copy all files including pre-created scripts and configs
-COPY . /ota-testing/
 
 # Create required directories
 RUN mkdir -p /ota-testing/{logs,data,repos}

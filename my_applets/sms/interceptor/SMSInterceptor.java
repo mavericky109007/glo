@@ -1,56 +1,54 @@
-package com.example.smsinterceptor;
+package sms.interceptor;
 
-import javacard.framework.*;
-import javacard.security.*;
+import javacard.framework.APDU;
+import javacard.framework.Applet;
+import javacard.framework.ISO7816;
+import javacard.framework.ISOException;
+import javacard.framework.Util;
 
 public class SMSInterceptor extends Applet {
 
-    // AID: A000000151DE0FFA32AC01A148
-
-    // Define the Applet AID as a byte array
+    // AID of the applet (matching the build script)
     private static final byte[] APPLET_AID = {
-        (byte)0xA0, (byte)0x00, (byte)0x00, (byte)0x01, (byte)0x51, (byte)0xDE, (byte)0x0F, (byte)0xFA, (byte)0x32, (byte)0xAC, (byte)0x01, (byte)0xA1, (byte)0x48
+        (byte) 0xA0, (byte) 0x00, (byte) 0x00, (byte) 0x01, (byte) 0x51,
+        (byte) 0xDE, (byte) 0x0F, (byte) 0xFA, (byte) 0x32, (byte) 0xAC,
+        (byte) 0x01, (byte) 0x01 // New Applet AID bytes
     };
 
-    // Define the Package AID as a byte array (optional, but good practice)
-    private static final byte[] PACKAGE_AID = {
-        (byte)0xA0, (byte)0x00, (byte)0x00, (byte)0x01, (byte)0x51, (byte)0xDE, (byte)0x0F, (byte)0xFA, (byte)0x32, (byte)0xAC, (byte)0x01
-    };
+    // Instruction byte for the command to intercept SMS (keeping from previous version)
+    // private static final byte INS_INTERCEPT_SMS = (byte) 0x01; // Not used in current process method, but keep for potential future use or context
 
+    // **** INSTALL METHOD ****
+    // Standard install method that registers the applet with the AID provided during installation
+    public static void install(byte[] bArray, short bOffset, byte bLength) {
+        // bArray contains the install parameters
+        // bArray[bOffset] is the length of the AID
+        // The AID bytes start at bOffset + 1
+        new SMSInterceptor().register(bArray, (short) (bOffset + 1), bArray[bOffset]);
+    }
 
+    // **** CONSTRUCTOR ****
     private SMSInterceptor() {
-        // Register the applet with the JCRE
+        // Register the applet with its hardcoded AID
+        // This is often done in the constructor when the AID is known at build time
         register(APPLET_AID, (short) 0, (byte) APPLET_AID.length);
     }
 
-    public static void install(byte[] bArray, short bOffset, byte bLength) {
-        // Create an instance of the applet and register it
-        new SMSInterceptor().register(bArray, (short) (bOffset + bArray[bOffset]), (byte) bArray[(short) (bOffset + bArray[bOffset])]);
-    }
-
+    // **** MAIN DISPATCH ****
+    @Override
     public void process(APDU apdu) {
-        // Check if the applet is being selected
+        byte[] buf = apdu.getBuffer();
+
+        /* Example “select” handling */
         if (selectingApplet()) {
             return;
         }
 
-        byte[] buffer = apdu.getBuffer();
-        short bytesRead = apdu.setIncomingAndReceive();
-
-        // Implement your applet logic here based on incoming APDU commands
-        // Example: Process a simple command
-        // if (buffer[ISO7816.OFFSET_INS] == (byte) 0x00) {
-        //     // Handle command 0x00
-        //     short le = apdu.setOutgoing();
-        //     apdu.setOutgoingLength((short) 5);
-        //     buffer[0] = (byte) 0x01; // Example response data
-        //     buffer[1] = (byte) 0x02;
-        //     buffer[2] = (byte) 0x03;
-        //     buffer[3] = (byte) 0x90; // SW1
-        //     buffer[4] = (byte) 0x00; // SW2
-        //     apdu.sendBytes((short) 0, (short) 5);
-        // } else {
-        //     ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
-        // }
+        /* Very simple demo INS = 0x50 */
+        if (buf[ISO7816.OFFSET_INS] == (byte) 0x50) {
+            ISOException.throwIt(ISO7816.SW_NO_ERROR);
+        } else {
+            ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
+        }
     }
 }

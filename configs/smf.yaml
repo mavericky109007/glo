@@ -1,6 +1,6 @@
 logger:
   file:
-    path: /ota-testing/logs/smf.log
+    path: /home/tetrixcorps/Desktop/glo/ota-testing/logs/smf.log
   level: info
 
 global:

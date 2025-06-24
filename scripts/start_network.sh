@@ -1,52 +1,57 @@
-#!/bin/bash
-echo "=== Starting OTA Network Components (Fixed) ==="
+#!/usr/bin/env bash
+# Exit immediately if a command exits with a non-zero status.
+set -euo pipefail
 
-# Step 1: Kill ALL existing Open5GS processes
-echo "Stopping existing Open5GS processes..."
-pkill -f open5gs-nrfd
-pkill -f open5gs-mmed
-pkill -f open5gs-sgwcd
-pkill -f open5gs-sgwud
-pkill -f open5gs-smfd
-pkill -f open5gs-upfd
+echo "=== OTA Core Network Bootstrap (Production-Ready Script) ==="
 
-# Wait for processes to fully terminate
-sleep 5
+# --- Configuration ---
+CONFIG_SOURCE_DIR="/home/tetrixcorps/Desktop/glo/configs"
+CONFIG_DEST_DIR="/usr/local/etc/open5gs"
+SESSION_NAME="ota-network"
+REQUIRED_CONFIGS=("mme.yaml" "sgwc.yaml" "sgwu.yaml" "smf.yaml" "upf.yaml" "nrf.yaml")
 
-# Step 2: Verify no processes are running
-echo "Verifying cleanup..."
-REMAINING=$(ps aux | grep open5gs | grep -v grep | wc -l)
-if [ $REMAINING -gt 0 ]; then
-    echo "Force killing remaining processes..."
-    pkill -9 -f open5gs
-    sleep 2
-fi
+# --- Step 1: Clean Up Previous Session ---
+echo "--> Stopping existing tmux session and Open5GS processes..."
+tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+# Use sudo and -9 to forcefully kill any orphaned processes
+sudo pkill -9 -f open5gs- || true
+sleep 2 # Allow time for ports to be released
 
-# Step 3: Start services in correct order
-echo "Starting Open5GS NRF..."
-/usr/local/bin/open5gs-nrfd -c /usr/local/etc/open5gs/nrf.yaml -D &
+# --- Step 2: Create Backup Directory and Validate/Copy Configs ---
+echo "--> Backing up existing configurations and copying new ones..."
+# Create the backup directory if it doesn't exist
+BACKUP_DIR="$CONFIG_DEST_DIR/backup_$(date +%s)"
+sudo mkdir -p "$BACKUP_DIR"
+# Copy existing configs to the backup directory
+sudo cp "$CONFIG_DEST_DIR"/*.yaml "$BACKUP_DIR/" 2>/dev/null || echo "No existing configs to back up."
+
+# Validate and copy new configuration files
+for config_file in "${REQUIRED_CONFIGS[@]}"; do
+    if [[ ! -f "$CONFIG_SOURCE_DIR/$config_file" ]]; then
+        echo "❌ ERROR: Required configuration file '$config_file' not found in '$CONFIG_SOURCE_DIR'."
+        exit 1
+    fi
+    echo "Copying '$config_file'..."
+    sudo cp "$CONFIG_SOURCE_DIR/$config_file" "$CONFIG_DEST_DIR/"
+done
+
+# --- Step 3: Start Services in Background ---
+echo "--> Launching services in the background..."
+
+sudo /usr/local/bin/open5gs-nrfd -c "$CONFIG_DEST_DIR/nrf.yaml" -D &
 sleep 2
 
-echo "Starting Open5GS SGW-U..."
-/usr/local/bin/open5gs-sgwud -c /usr/local/etc/open5gs/sgwu.yaml -D &
+sudo /usr/local/bin/open5gs-sgwud -c "$CONFIG_DEST_DIR/sgwu.yaml" -D &
 sleep 1
-
-echo "Starting Open5GS UPF..."
-/usr/local/bin/open5gs-upfd -c /usr/local/etc/open5gs/upf.yaml -D &
+sudo /usr/local/bin/open5gs-upfd  -c "$CONFIG_DEST_DIR/upf.yaml"  -D &
 sleep 1
-
-echo "Starting Open5GS SGW-C..."
-/usr/local/bin/open5gs-sgwcd -c /usr/local/etc/open5gs/sgwc.yaml -D &
+sudo /usr/local/bin/open5gs-sgwcd -c "$CONFIG_DEST_DIR/sgwc.yaml" -D &
 sleep 1
+sudo /usr/local/bin/open5gs-smfd  -c "$CONFIG_DEST_DIR/smf.yaml"  -D &
+sleep 1
+sudo /usr/local/bin/open5gs-mmed  -c "$CONFIG_DEST_DIR/mme.yaml"  -D &
 
-echo "Starting Open5GS SMF..."
-/usr/local/bin/open5gs-smfd -c /usr/local/etc/open5gs/smf.yaml -D &
-sleep 2
+sleep 5 # Allow services to initialize
 
-echo "Starting Open5GS MME..."
-/usr/local/bin/open5gs-mmed -c /usr/local/etc/open5gs/mme.yaml -D &
-
-sleep 3
-echo "Network components started successfully!"
-echo "=== Checking Running Processes ==="
-ps aux | grep open5gs | grep -v grep
+echo "✅ Success! All network components launched in the background."
+echo "Use 'sudo pkill -9 -f open5gs-' to stop them."

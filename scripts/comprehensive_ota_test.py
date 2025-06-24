@@ -1,171 +1,163 @@
 #!/usr/bin/env python3
 """
-Comprehensive OTA Testing Script
-Demonstrates various attack scenarios and defense mechanisms
+Comprehensive OTA Test Suite
+Tests various OTA scenarios with different MSISDN formats
 """
 
 import sys
 import time
-import logging
 from enhanced_ota_client import EnhancedOTAClient
 
-class OTATestSuite:
+class ComprehensiveOTATest:
+    """Comprehensive OTA testing suite"""
+    
     def __init__(self):
         self.client = EnhancedOTAClient()
-        self.logger = logging.getLogger(__name__)
-        
-    def test_basic_installation(self, destination: str):
-        """Test basic applet installation"""
-        print("\n=== Testing Basic Applet Installation ===")
-        
-        applet_aid = "D07002CA44900101"
-        cap_file = "~/ota-testing/repos/hello-stk/hello-stk/hello-stk.cap"
-        
-        if self.client.install_applet(destination, applet_aid, cap_file):
-            print("✓ Basic installation test passed")
-            return True
-        else:
-            print("✗ Basic installation test failed")
-            return False
+        self.test_results = []
     
-    def test_applet_deletion(self, destination: str):
-        """Test applet deletion"""
-        print("\n=== Testing Applet Deletion ===")
+    def run_msisdn_validation_tests(self):
+        """Test MSISDN validation with various formats"""
+        print("=== MSISDN Validation Tests ===")
         
-        applet_aid = "D07002CA44900101"
-        
-        if self.client.delete_applet(destination, applet_aid):
-            print("✓ Deletion test passed")
-            return True
-        else:
-            print("✗ Deletion test failed")
-            return False
-    
-    def test_malicious_scenarios(self, destination: str):
-        """Test various malicious scenarios for research purposes"""
-        print("\n=== Testing Malicious Scenarios (Research Only) ===")
-        
-        scenarios = [
-            self._test_location_tracking,
-            self._test_sms_interception,
-            self._test_data_exfiltration
+        test_cases = [
+            ("16461099282", True, "US number"),
+            ("447700900123", True, "UK number"),
+            ("491701234567", True, "German number"),
+            ("+16461099282", True, "US number with +"),
+            ("0461099282", True, "National format"),
+            ("123", False, "Too short"),
+            ("123456789012345678", False, "Too long"),
+            ("001010123456789", True, "Test network"),
         ]
         
-        results = []
-        for scenario in scenarios:
-            try:
-                result = scenario(destination)
-                results.append(result)
-            except Exception as e:
-                self.logger.error(f"Scenario failed: {e}")
-                results.append(False)
-        
-        return all(results)
+        for msisdn, expected, description in test_cases:
+            result = self.client.validate_msisdn(msisdn)
+            status = "✅" if result == expected else "❌"
+            print(f"{status} {description}: {msisdn} -> {result}")
+            self.test_results.append((f"MSISDN validation: {description}", result == expected))
     
-    def _test_location_tracking(self, destination: str):
-        """Simulate location tracking attack"""
-        print("  Testing location tracking simulation...")
+    def run_connectivity_tests(self):
+        """Test SMPP connectivity"""
+        print("\n=== Connectivity Tests ===")
         
-        # Create PROVIDE LOCAL INFORMATION command
-        location_cmd = "81030126008202818383010000"  # Simplified example
-        ota_message = self.client.wrap_in_ota_envelope(location_cmd, 'install')
-        
-        # This would be detected by proper security measures
-        print("  ⚠️  Location tracking attempt (would be blocked by security)")
-        return True
+        # Test connection
+        if self.client.connect():
+            print("✅ SMPP connection successful")
+            self.test_results.append(("SMPP connection", True))
+            
+            # Test disconnect
+            self.client.disconnect()
+            print("✅ SMPP disconnection successful")
+            self.test_results.append(("SMPP disconnection", True))
+        else:
+            print("❌ SMPP connection failed")
+            self.test_results.append(("SMPP connection", False))
     
-    def _test_sms_interception(self, destination: str):
-        """Simulate SMS interception attack"""
-        print("  Testing SMS interception simulation...")
-        
-        # Create SMS interception applet (educational example)
-        intercept_cmd = "81030113008202818384050123456789"  # Simplified
-        ota_message = self.client.wrap_in_ota_envelope(intercept_cmd, 'install')
-        
-        print("  ⚠️  SMS interception attempt (would be blocked by security)")
-        return True
-    
-    def _test_data_exfiltration(self, destination: str):
-        """Simulate data exfiltration attack"""
-        print("  Testing data exfiltration simulation...")
-        
-        # Create data collection applet (educational example)
-        exfil_cmd = "81030120008202818385020000"  # Simplified
-        ota_message = self.client.wrap_in_ota_envelope(exfil_cmd, 'install')
-        
-        print("  ⚠️  Data exfiltration attempt (would be blocked by security)")
-        return True
-    
-    def test_security_measures(self, destination: str):
-        """Test security and defense mechanisms"""
-        print("\n=== Testing Security Measures ===")
-        
-        # Test signature verification
-        print("  Testing signature verification...")
-        # Implementation would verify cryptographic signatures
-        
-        # Test rate limiting
-        print("  Testing rate limiting...")
-        # Implementation would limit OTA message frequency
-        
-        # Test content filtering
-        print("  Testing content filtering...")
-        # Implementation would filter suspicious commands
-        
-        print("✓ Security measures test completed")
-        return True
-    
-    def run_full_test_suite(self, destination: str):
-        """Run complete test suite"""
-        print("Starting Comprehensive OTA Test Suite")
-        print("=====================================")
+    def run_ota_message_tests(self, test_msisdn: str):
+        """Test OTA message sending"""
+        print(f"\n=== OTA Message Tests (MSISDN: {test_msisdn}) ===")
         
         if not self.client.connect():
-            print("Failed to connect to SMPP server")
-            return False
+            print("❌ Cannot connect to SMPP server")
+            return
         
         try:
-            tests = [
-                ("Basic Installation", lambda: self.test_basic_installation(destination)),
-                ("Applet Deletion", lambda: self.test_applet_deletion(destination)),
-                ("Security Measures", lambda: self.test_security_measures(destination)),
-                ("Malicious Scenarios", lambda: self.test_malicious_scenarios(destination))
-            ]
+            # Test message sending
+            result = self.client.send_test_message(test_msisdn)
+            status = "✅" if result else "❌"
+            print(f"{status} Test message sent")
+            self.test_results.append(("OTA test message", result))
             
-            results = []
-            for test_name, test_func in tests:
-                print(f"\nRunning {test_name} test...")
-                result = test_func()
-                results.append((test_name, result))
-                time.sleep(2)  # Delay between tests
+            time.sleep(1)  # Brief delay between messages
             
-            # Print summary
-            print("\n" + "="*50)
-            print("TEST SUMMARY")
-            print("="*50)
+            # Test applet installation (with dummy data)
+            dummy_aid = "D07002CA44900101"
+            dummy_cap = b'\x00\x01\x02\x03DUMMY_CAP_DATA'
             
-            for test_name, result in results:
-                status = "PASS" if result else "FAIL"
-                print(f"{test_name:<25} {status}")
+            # Create temporary CAP file for testing
+            with open('/tmp/test_applet.cap', 'wb') as f:
+                f.write(dummy_cap)
             
-            overall_result = all(result for _, result in results)
-            print(f"\nOverall Result: {'PASS' if overall_result else 'FAIL'}")
+            result = self.client.install_applet(test_msisdn, dummy_aid, '/tmp/test_applet.cap')
+            status = "✅" if result else "❌"
+            print(f"{status} Applet installation message sent")
+            self.test_results.append(("OTA install message", result))
             
-            return overall_result
+            time.sleep(1)
+            
+            # Test applet deletion
+            result = self.client.delete_applet(test_msisdn, dummy_aid)
+            status = "✅" if result else "❌"
+            print(f"{status} Applet deletion message sent")
+            self.test_results.append(("OTA delete message", result))
             
         finally:
             self.client.disconnect()
+    
+    def run_international_tests(self):
+        """Test international MSISDN handling"""
+        print("\n=== International MSISDN Tests ===")
+        
+        international_numbers = [
+            ("16461099282", "US"),
+            ("447700900123", "UK"),
+            ("491701234567", "Germany"),
+            ("33123456789", "France"),
+            ("39123456789", "Italy"),
+        ]
+        
+        for msisdn, country in international_numbers:
+            normalized = self.client.normalize_msisdn(msisdn)
+            valid = self.client.validate_msisdn(msisdn)
+            status = "✅" if valid else "❌"
+            print(f"{status} {country}: {msisdn} -> {normalized}")
+            self.test_results.append((f"International {country}", valid))
+    
+    def print_summary(self):
+        """Print test summary"""
+        print("\n" + "="*50)
+        print("TEST SUMMARY")
+        print("="*50)
+        
+        passed = sum(1 for _, result in self.test_results if result)
+        total = len(self.test_results)
+        
+        print(f"Total tests: {total}")
+        print(f"Passed: {passed}")
+        print(f"Failed: {total - passed}")
+        print(f"Success rate: {passed/total*100:.1f}%")
+        
+        print("\nDetailed Results:")
+        for test_name, result in self.test_results:
+            status = "✅" if result else "❌"
+            print(f"{status} {test_name}")
+        
+        return passed == total
 
 def main():
+    """Main test runner"""
     if len(sys.argv) < 2:
-        print("Usage: python3 comprehensive_ota_test.py <destination_msisdn>")
+        print("Usage: python3 comprehensive_ota_test.py <test_msisdn>")
+        print("Example: python3 comprehensive_ota_test.py 16461099282")
         sys.exit(1)
     
-    destination = sys.argv[1]
-    test_suite = OTATestSuite()
+    test_msisdn = sys.argv[1]
     
-    success = test_suite.run_full_test_suite(destination)
+    print("🧪 Starting Comprehensive OTA Test Suite")
+    print(f"Test MSISDN: {test_msisdn}")
+    print("="*50)
+    
+    test_suite = ComprehensiveOTATest()
+    
+    # Run all test categories
+    test_suite.run_msisdn_validation_tests()
+    test_suite.run_connectivity_tests()
+    test_suite.run_ota_message_tests(test_msisdn)
+    test_suite.run_international_tests()
+    
+    # Print summary and exit with appropriate code
+    success = test_suite.print_summary()
     sys.exit(0 if success else 1)
 
-if __name__ == "__main__":
-    main() 
+if __name__ == '__main__':
+    main()

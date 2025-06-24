@@ -11,7 +11,10 @@ services:
       - ota-network
 
   ota-testing-env:
-    build: .
+    build:
+      context: .
+      args:
+        GITHUB_PAT: github_pat_11BMLQYEA0OUWspJ8QWdDk_6M3up5KmlBoONgkpU1Kxctll3uqNUV1zKUSETpvXDPP5WUHZiBtONUV1
     container_name: ota-testing-env
     depends_on:
       - ota-mongodb

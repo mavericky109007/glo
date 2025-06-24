@@ -23,6 +23,29 @@ echo "Environment ready!"
 echo "Available commands:"
 echo "  /ota-testing/scripts/start_network.sh    - Start network components"
 echo "  /ota-testing/scripts/setup-subscriber.sh - Setup test subscriber"
+# Start the receive.py script in the background
+echo "Starting receive.py script..."
+python3 /ota-testing/receive.py &
+
+# Start the Telnyx SMPP Bridge server in the background
+echo "Starting Telnyx SMPP Bridge server..."
+python3 /ota-testing/scripts/telnyx_smpp_server.py &
+
+# Wait for the SMPP server to be ready
+echo "Waiting for SMPP server to be ready on 127.0.0.1:2775..."
+timeout=30
+for i in $(seq $timeout); do
+    if nc -z 127.0.0.1 2775 >/dev/null 2>&1; then
+        echo "SMPP server is ready!"
+        break
+    fi
+    if [ $i -eq $timeout ]; then
+        echo "Error: SMPP server did not become ready within $timeout seconds."
+        exit 1
+    fi
+    sleep 1
+done
+
 if [ "$1" = "bash" ] || [ "$1" = "shell" ]; then
     exec /bin/bash
 else

@@ -1,6 +1,6 @@
 logger:
   file:
-    path: /ota-testing/logs/sgwc.log
+    path: /home/tetrixcorps/Desktop/glo/ota-testing/logs/sgwc.log
   level: info
 
 global:
